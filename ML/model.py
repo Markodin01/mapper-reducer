@@ -1,5 +1,7 @@
 class MyModel:
     # ... model methods ...
+    #
+    #
 
     def get_parameters(self):
         # Return model parameters
