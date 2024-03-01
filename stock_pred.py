@@ -2,15 +2,11 @@ import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 
 import os
-# for dirname, _, filenames in os.walk('/kaggle/input'):
-#     for filename in filenames:
-#         print(os.path.join(dirname, filename))
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
 pd.options.display.width = None
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.min_rows', 20)
-import datetime
 from psutil import Process
 from IPython.display import display_html 
 
@@ -205,13 +201,6 @@ print(x_train.shape, y_train.shape)
 print(x_val.shape, y_val.shape)
 print(x_test.shape, y_test.shape)
 
-batch_size = 1  # x_train.shape[0] // 10
-epochs = 1  # 250
-print(f"batch_size={batch_size}, epochs={epochs}")
-LR = 0.05  # 5e-2  # learning rate of the gradient descent
-LAMBD = 0.03  # 3e-2  # lambda in L2 regularizaion
-DP = 0.2  # dropout rate
-RDP = 0.2  # recurrent dropout rate
 
 
 
@@ -222,6 +211,7 @@ from keras.layers import Dense, LSTM, BatchNormalization, Dropout
 from keras.optimizers import Adam
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping
 from keras.regularizers import l2
+import time
 
 # Model Configuration Parameters
 batch_size = 32  # Optimal batch size, subject to experimentation
@@ -256,11 +246,19 @@ model.add(Dense(1, activation='linear'))
 model.compile(optimizer=Adam(learning_rate=LR), loss='mean_squared_error')
 
 # Define callbacks for dynamic learning rate adjustment and early stopping
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.001)
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
+
+start_train = time.time()
 # Train the model with training data, validation split, and callbacks
-model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_val, y_val), callbacks=[reduce_lr, early_stopping])
+history = model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_val, y_val), callbacks=[reduce_lr, early_stopping])
+end_train = time.time()
+
+total_training_time = end_train - start_train
+average_time_per_epoch = total_training_time / epochs
+print(f'Total training time: {total_training_time} seconds')
+print(f'Average time per epoch: {average_time_per_epoch} seconds')
 
 # Function to inverse transform the scaled data back to original scale
 def inv_transform(scaler, data, column_name, feature_names):
@@ -281,7 +279,65 @@ rmse_val = np.sqrt(np.mean(np.square(predictions_val - y_val)))
 rmse_test = np.sqrt(np.mean(np.square(predictions_test - y_test)))
 print(f"Validation RMSE: {rmse_val}, Test RMSE: {rmse_test}")
 
-# Visualize or further analyze predictions_val and predictions_test as needed
+# Plotting the training and validation losses
+plt.figure(figsize=(10, 6))
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss Over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+import xgboost as xgb
+import numpy as np
+import pandas as pd
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+
+# Assuming your dataset is already loaded, preprocessed, and split into features (X) and target (y)
+
+# Reshape or adjust your data as necessary for XGBoost
+# Note: XGBoost does not require the input to be 3D like LSTM does, so you might flatten or reshape data if coming from LSTM preparation
+# Example: x_train = x_train.reshape((x_train.shape[0], -1))
+# This step depends on how your data was prepared for LSTM and might not be necessary
+
+# Convert the datasets to DMatrix, which is a highly efficient XGBoost data structure
+dtrain = xgb.DMatrix(x_train, label=y_train)
+dval = xgb.DMatrix(x_val, label=y_val)
+dtest = xgb.DMatrix(x_test)
+
+# Set XGBoost parameters
+# These parameters should be tuned according to your specific dataset and task
+params = {
+    'max_depth': 3,  # depth of the trees
+    'eta': 0.1,  # learning rate
+    'objective': 'reg:squarederror',  # loss function for regression
+    'eval_metric': 'rmse',  # evaluation metric
+}
+num_rounds = 100  # Number of training rounds
+
+# Train the model
+evals = [(dtrain, 'train'), (dval, 'eval')]
+bst = xgb.train(params, dtrain, num_rounds, evals, early_stopping_rounds=10)
+
+# Predictions
+predictions_val = bst.predict(dval)
+predictions_test = bst.predict(dtest)
+
+# Calculate RMSE for validation and test predictions
+rmse_val = np.sqrt(mean_squared_error(y_val, predictions_val))
+rmse_test = np.sqrt(mean_squared_error(y_test, predictions_test))
+print(f"Validation RMSE: {rmse_val}, Test RMSE: {rmse_test}")
+
+# If you want to save the model
+# bst.save_model('xgboost_model.model')
+
+# To load the model
+# bst = xgb.Booster()
+# bst.load_model('xgboost_model.model')
 
 
 
