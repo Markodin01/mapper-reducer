@@ -206,124 +206,32 @@ print(x_test.shape, y_test.shape)
 
 import numpy as np
 import pandas as pd
-from keras.models import Sequential
-from keras.layers import Dense, LSTM, BatchNormalization, Dropout
-from keras.optimizers import Adam
-from keras.callbacks import ReduceLROnPlateau, EarlyStopping
-from keras.regularizers import l2
-import time
-
-# Model Configuration Parameters
-batch_size = 32  # Optimal batch size, subject to experimentation
-epochs = 100  # Number of epochs to train, adjust based on early stopping
-LR = 0.001  # Optimized learning rate for Adam
-LAMBD = 0.01  # L2 regularization factor
-DP = 0.2  # Dropout rate for dropout layers
-
-# Assuming x_train, y_train, x_val, y_val, x_test, y_test, and scaler are defined and preprocessed
-
-# Initialize the Sequential model
-model = Sequential()
-
-# First LSTM layer with L2 regularization, input shape from training data
-model.add(LSTM(128, return_sequences=True, input_shape=(x_train.shape[1], x_train.shape[2]), kernel_regularizer=l2(LAMBD)))
-model.add(Dropout(DP))
-model.add(BatchNormalization())
-
-# Second LSTM layer
-model.add(LSTM(64, return_sequences=False, kernel_regularizer=l2(LAMBD)))
-model.add(Dropout(DP))
-model.add(BatchNormalization())
-
-# Dense layer with ReLU activation
-model.add(Dense(25, activation='relu'))
-model.add(Dropout(DP))
-
-# Output layer for regression
-model.add(Dense(1, activation='linear'))
-
-# Compile the model with Adam optimizer and MSE loss function
-model.compile(optimizer=Adam(learning_rate=LR), loss='mean_squared_error')
-
-# Define callbacks for dynamic learning rate adjustment and early stopping
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.001)
-early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-
-
-start_train = time.time()
-# Train the model with training data, validation split, and callbacks
-history = model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_val, y_val), callbacks=[reduce_lr, early_stopping])
-end_train = time.time()
-
-total_training_time = end_train - start_train
-average_time_per_epoch = total_training_time / epochs
-print(f'Total training time: {total_training_time} seconds')
-print(f'Average time per epoch: {average_time_per_epoch} seconds')
-
-# Function to inverse transform the scaled data back to original scale
-def inv_transform(scaler, data, column_name, feature_names):
-    dummy_df = pd.DataFrame(np.zeros((len(data), len(feature_names))), columns=feature_names)
-    dummy_df[column_name] = data.flatten()
-    inverted_data = scaler.inverse_transform(dummy_df)[:, feature_names.index(column_name)]
-    return inverted_data
-
-# Predict and inverse transform the predictions for validation and test sets
-predictions_val = model.predict(x_val)
-predictions_val = inv_transform(scaler, predictions_val, "close", ["close"])
-
-predictions_test = model.predict(x_test)
-predictions_test = inv_transform(scaler, predictions_test, "close", ["close"])
-
-# Calculate RMSE for validation and test predictions
-rmse_val = np.sqrt(np.mean(np.square(predictions_val - y_val)))
-rmse_test = np.sqrt(np.mean(np.square(predictions_test - y_test)))
-print(f"Validation RMSE: {rmse_val}, Test RMSE: {rmse_test}")
-
-# Plotting the training and validation losses
-plt.figure(figsize=(10, 6))
-plt.plot(history.history['loss'], label='Training Loss')
-plt.plot(history.history['val_loss'], label='Validation Loss')
-plt.title('Training and Validation Loss Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-
 import xgboost as xgb
-import numpy as np
-import pandas as pd
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 
-# Assuming your dataset is already loaded, preprocessed, and split into features (X) and target (y)
+# Assuming data loading and preprocessing has been done above
 
-# Reshape or adjust your data as necessary for XGBoost
-# Note: XGBoost does not require the input to be 3D like LSTM does, so you might flatten or reshape data if coming from LSTM preparation
-# Example: x_train = x_train.reshape((x_train.shape[0], -1))
-# This step depends on how your data was prepared for LSTM and might not be necessary
-
-# Convert the datasets to DMatrix, which is a highly efficient XGBoost data structure
+# Proceed to create DMatrix objects with the reshaped data
 dtrain = xgb.DMatrix(x_train, label=y_train)
 dval = xgb.DMatrix(x_val, label=y_val)
 dtest = xgb.DMatrix(x_test)
 
-# Set XGBoost parameters
-# These parameters should be tuned according to your specific dataset and task
+# Define XGBoost model parameters
 params = {
-    'max_depth': 3,  # depth of the trees
-    'eta': 0.1,  # learning rate
-    'objective': 'reg:squarederror',  # loss function for regression
-    'eval_metric': 'rmse',  # evaluation metric
+    'max_depth': 6,  # Depth of the trees
+    'eta': 0.1,  # Learning rate
+    'objective': 'reg:squarederror',  # Objective function for regression tasks
+    'eval_metric': 'rmse',  # Evaluation metric
 }
-num_rounds = 100  # Number of training rounds
 
-# Train the model
+num_rounds = 100  # Number of boosting rounds
+
+# Train the XGBoost model
 evals = [(dtrain, 'train'), (dval, 'eval')]
 bst = xgb.train(params, dtrain, num_rounds, evals, early_stopping_rounds=10)
 
-# Predictions
+# Making predictions
 predictions_val = bst.predict(dval)
 predictions_test = bst.predict(dtest)
 
@@ -332,14 +240,49 @@ rmse_val = np.sqrt(mean_squared_error(y_val, predictions_val))
 rmse_test = np.sqrt(mean_squared_error(y_test, predictions_test))
 print(f"Validation RMSE: {rmse_val}, Test RMSE: {rmse_test}")
 
-# If you want to save the model
-# bst.save_model('xgboost_model.model')
+# Optional: Save the trained model
+bst.save_model('xgboost_model.json')
 
-# To load the model
+# If needed: Load the model
 # bst = xgb.Booster()
-# bst.load_model('xgboost_model.model')
+# bst.load_model('xgboost_model.json')
 
+# Visualizing feature importance
+xgb.plot_importance(bst)
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+# Assuming you have actual and predicted values for validation and test sets
+# y_val, predictions_val, y_test, predictions_test
 
+# Calculate Mean Absolute Error (MAE)
+mae_val = mean_absolute_error(y_val, predictions_val)
+mae_test = mean_absolute_error(y_test, predictions_test)
+print(f"Validation MAE: {mae_val}, Test MAE: {mae_test}")
+
+# Calculate RMSE for completeness
+rmse_val = np.sqrt(mean_squared_error(y_val, predictions_val))
+rmse_test = np.sqrt(mean_squared_error(y_test, predictions_test))
+print(f"Validation RMSE: {rmse_val}, Test RMSE: {rmse_test}")
+
+# Plot actual vs. predicted values
+def plot_predictions(actual, predicted, title='Actual vs. Predicted'):
+    plt.figure(figsize=(10, 6))
+    plt.plot(actual, label='Actual Values')
+    plt.plot(predicted, label='Predicted Values')
+    plt.title(title)
+    plt.xlabel('Time Steps')
+    plt.ylabel('Target Variable')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+# Plot for validation set
+plot_predictions(y_val, predictions_val, 'Validation Set: Actual vs. Predicted')
+
+# Plot for test set
+plot_predictions(y_test, predictions_test, 'Test Set: Actual vs. Predicted')
 
