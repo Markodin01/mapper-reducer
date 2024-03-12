@@ -11,6 +11,7 @@ def preprocess_text(text):
     return text
 
 def process_file(file_path):
+    
     """Process a single JSON file."""
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
@@ -22,8 +23,19 @@ def process_file(file_path):
                 text = preprocess_text(text)
 
                 title, text = extract_title_and_text(text)  # Extract title from text
+
                 # Now you have `created` and `preprocessed text`, you can proceed with your analysis or save the data
-                print(created, text, title)  # Example of how to use the data
+                data = {
+                    'created': created,
+                    'title': title,
+                    'text': text
+                }
+
+                # Write the dictionary to a JSON file
+                with open('article_data.json', 'a') as f:
+                    json.dump(data, f)
+                    f.write(', \n')
+
             except json.JSONDecodeError:
                 print(f"Error decoding JSON from file {file_path}")
 
@@ -38,8 +50,17 @@ def extract_title_and_text(text):
     if match:
         title = match.group(1).strip()  # Extracts the title and removes leading/trailing whitespace
         rest_of_text = match.group(2).strip()  # Extracts the rest of the text and removes leading/trailing whitespace
-        return title, rest_of_text
-    return "", text  # Return the original text if no title is found
+    else:
+        # If the text does not start with square brackets, find the text before the first full stop
+        match = re.match(r'[^.]*', text)
+        if match:
+            title = match.group(0).strip()  # Extracts the title and removes leading/trailing whitespace
+            rest_of_text = text[len(title):].strip()  # Extracts the rest of the text and removes leading/trailing whitespace
+        else:
+            title = ""
+            rest_of_text = text  # Return the original text if no title is found
+
+    return title, rest_of_text
 
 # Example usage
 folder_path = '/Users/markodin/Desktop/articles/'
