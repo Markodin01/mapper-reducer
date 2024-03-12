@@ -12,10 +12,15 @@ def preprocess_text(text):
 
 def process_file(file_path):
     
+    counter = 0
+    
     """Process a single JSON file."""
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
+            if counter == 10000:
+                break
             try:
+
                 article = json.loads(line)
                 created = article['created']
                 text = article['text']
@@ -30,11 +35,13 @@ def process_file(file_path):
                     'title': title,
                     'text': text
                 }
+                
 
                 # Write the dictionary to a JSON file
                 with open('article_data.json', 'a') as f:
                     json.dump(data, f)
                     f.write(', \n')
+                counter += 1
 
             except json.JSONDecodeError:
                 print(f"Error decoding JSON from file {file_path}")
