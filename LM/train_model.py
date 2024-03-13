@@ -1,7 +1,6 @@
 import pandas as pd
 import json
 
-
 data = json.load(open('LM/article_data.json'))
 
 # Assuming `data` is your loaded JSON data
@@ -11,20 +10,15 @@ df = pd.DataFrame(data)
 df['created_at'] = pd.to_datetime(df['created'], errors='coerce')
 df['year'] = df['created_at'].dt.year
 df['month'] = df['created_at'].dt.month
-# Add more temporal features as needed
 
 # Drop the original `created_at` column if no longer needed
 df.drop(['created_at'], axis=1, inplace=True)
-
-
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Vectorize `title` + `text`
 vectorizer = TfidfVectorizer(max_features=10000)  # Adjust as necessary
 text_features = vectorizer.fit_transform(df['title'] + ' ' + df['text']).toarray()
-
-
 
 import tensorflow as tf
 import numpy as np
@@ -59,13 +53,61 @@ y = tf.keras.utils.to_categorical(labels, num_classes=total_words)
 # Define the model
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Embedding(total_words, 100, input_length=max_sequence_len-1))
-model.add(tf.keras.layers.LSTM(150, return_sequences=True))
-model.add(tf.keras.layers.LSTM(100))
+model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(150, return_sequences=True)))
+model.add(tf.keras.layers.Dropout(0.2))
+model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(100)))
+model.add(tf.keras.layers.Dropout(0.2))
 model.add(tf.keras.layers.Dense(total_words, activation='softmax'))
 
-model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+import matplotlib.pyplot as plt
+import time
+
+optimizer = tf.keras.optimizers.Adam(lr=0.01)
+
+# Compile the model
+model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+# Define learning rate schedule
+reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.001)
 model.summary()
 
-# Train the model
-model.fit(X, y, epochs=100, verbose=1)
+# Define the TimeHistory callback
+class TimeHistory(tf.keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.times = []
+
+    def on_epoch_begin(self, batch, logs={}):
+        self.epoch_time_start = time.time()
+
+    def on_epoch_end(self, batch, logs={}):
+        self.times.append(time.time() - self.epoch_time_start)
+
+# Initialize the TimeHistory callback
+time_callback = TimeHistory()
+
+# Train the model and record the history
+history = model.fit(X, y, epochs=100, verbose=1, callbacks=[reduce_lr, time_callback])
+
+# Plotting loss
+plt.figure()
+plt.plot(history.history['loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.savefig('model_loss.png')
+
+# Plotting accuracy
+plt.figure()
+plt.plot(history.history['accuracy'])
+plt.title('Model accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.savefig('model_accuracy.png')
+
+# Plotting time per epoch
+plt.figure()
+plt.plot(time_callback.times)
+plt.title('Time per epoch')
+plt.ylabel('Time (seconds)')
+plt.xlabel('Epoch')
+plt.savefig('time_per_epoch.png')
 
