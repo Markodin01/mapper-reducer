@@ -87,6 +87,9 @@ time_callback = TimeHistory()
 # Train the model and record the history
 history = model.fit(X, y, epochs=100, verbose=1, callbacks=[reduce_lr, time_callback])
 
+# Save the entire model to a HDF5 file
+model.save('article_data_model.h5')
+
 # Plotting loss
 plt.figure()
 plt.plot(history.history['loss'])
