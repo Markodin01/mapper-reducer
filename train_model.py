@@ -47,6 +47,7 @@ for i in range(0, len(data), batch_size):
     batch_filtered_counts = batch_process_reducer(batch_mapped_data)
     # Now, batch_filtered_counts holds the filtered word counts for this batch
     # You can process these counts as needed (e.g., accumulate them, analyze, store, etc.)
+    
 
 
 ###############################################
