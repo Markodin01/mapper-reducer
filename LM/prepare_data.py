@@ -17,7 +17,7 @@ def process_file(file_path):
     """Process a single JSON file."""
     with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
-            if counter == 10000:
+            if counter == 50:
                 break
             try:
 
@@ -28,12 +28,13 @@ def process_file(file_path):
                 text = preprocess_text(text)
 
                 title, text = extract_title_and_text(text)  # Extract title from text
+                
+                cleaned_text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+                cleaned_title = re.sub(r'[^a-zA-Z0-9\s]', '', title)
 
                 # Now you have `created` and `preprocessed text`, you can proceed with your analysis or save the data
                 data = {
-                    'created': created,
-                    'title': title,
-                    'text': text
+                    'text': cleaned_text+cleaned_title,
                 }
                 
 

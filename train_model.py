@@ -4,113 +4,60 @@ import json
 
 data = json.load(open('LM/article_data.json'))
 
-# Assuming `data` is your loaded JSON data
-df = pd.DataFrame(data)
+import json
+import re
+from collections import defaultdict
 
-# Convert `created_at` to datetime and extract year, month, etc.
-df['created_at'] = pd.to_datetime(df['created'], errors='coerce')
-df['year'] = df['created_at'].dt.year
-df['month'] = df['created_at'].dt.month
-
-# Drop the original `created_at` column if no longer needed
-df.drop(['created_at'], axis=1, inplace=True)
-
-
-### map reduce step
-
-def mapper(df):
-    
+def mapper(json_record):
     """
-    The mapper function takes a text (string) and emits key-value pairs
-    for each word in the format (word, 1).
+    Mapper function to process each record.
     """
-    # Normalize the text to lower case and remove punctuation
-    text = df['text'].str.lower()
-    text_words = text.str.split().explode().reset_index(drop=True)
-    
-    title = df['title'].str.lower()
-    title_text = title.str.split().explode()
-    
-    list_of_trigrams_for_reducer = []
-    list_of_title_words_for_reducer = []
-    
-    for i in range(len(text_words)):
-        list_of_trigrams_for_reducer.append((text_words[i], 1))
-        
-    for title_word in title_text:
-        list_of_title_words_for_reducer.append((title_word, 1))
-        
-    return list_of_trigrams_for_reducer, list_of_title_words_for_reducer
+    text = json_record['text'].lower()
+    text = re.sub(r'\W+', ' ', text)
+    words = text.split()
+    return [(word, 1) for word in words]
 
-
-def reducer_to_dict(mapped_data):
-    aggregated_data_title = {}
-    aggregated_data_text = {}
-    
-    # Process title words
-    for title_word in mapped_data[0]:  # Assuming mapped_data[0] is the list of title words
-        key = title_word[0]  # The key is the word itself
-        count = title_word[1]
-        if key in aggregated_data_title:
-            aggregated_data_title[key] += count
-        else:
-            aggregated_data_title[key] = count
-    
-    # Process trigrams
-    for trigram in mapped_data[1]:  # Assuming mapped_data[1] is the list of trigrams
-        # Sort the words in the trigram to make the order irrelevant
-        words_sorted = ','.join(sorted(trigram[0].split(',')))
-        count = trigram[1]
-        if words_sorted in aggregated_data_text:
-            aggregated_data_text[words_sorted] += count
-        else:
-            aggregated_data_text[words_sorted] = count
-    
-    return aggregated_data_title, aggregated_data_text
-
-
-
-
-def reducer_to_df(mapped_data):
+def batch_process_reducer(batch_mapped_data, min_threshold=5, max_threshold=1000):
     """
-    Takes the mapped data, aggregates it using a reducer function to create two dictionaries,
-    and then converts those dictionaries into pandas DataFrames.
+    Reducer function that processes batches of mapped data, aggregates counts,
+    and then filters based on the frequency thresholds.
     """
-    aggregated_data_title, aggregated_data_text = reducer_to_dict(mapped_data)  # reducer_to_dict returns two dictionaries
-    
-    # Convert the aggregated data to lists of dictionaries suitable for DataFrame creation
-    data_for_df_title = [{'key': key, 'count': count} for key, count in aggregated_data_title.items()]
-    data_for_df_text = [{'key': key, 'count': count} for key, count in aggregated_data_text.items()]
-    
-    # Create the DataFrames
-    df_title = pd.DataFrame(data_for_df_title)
-    df_text = pd.DataFrame(data_for_df_text)
-    
-    return df_title, df_text
+    local_word_counts = defaultdict(int)
+    # Aggregate word counts for the batch
+    for word_count in batch_mapped_data:
+        for word, count in word_count:
+            local_word_counts[word] += count
 
-df_text, df_title = reducer_to_df(mapper(df))
+    # Apply filtering within the reducer for this batch
+    filtered_word_counts = {word: count for word, count in local_word_counts.items() if min_threshold <= count <= max_threshold}
+    
+    return filtered_word_counts
+
+# Load data
+with open('LM/article_data.json', 'r') as file:
+    data = json.load(file)
+
+# Example: Batch processing
+batch_size = 25
+for i in range(0, len(data), batch_size):
+    batch = data[i:i+batch_size]
+    batch_mapped_data = [mapper(record) for record in batch]
+    # Flatten the list of lists into a single list
+    flattened_mapped_data = [item for sublist in batch_mapped_data for item in sublist]
+    batch_filtered_counts = batch_process_reducer(batch_mapped_data)
+    # Now, batch_filtered_counts holds the filtered word counts for this batch
+    # You can process these counts as needed (e.g., accumulate them, analyze, store, etc.)
+
 
 ###############################################
 
 import tensorflow as tf
 import numpy as np
 
-# Add 'type' column to both dataframes
-df_text['type'] = 'text'
-df_title['type'] = 'title'
-
-# Concatenate the dataframes vertically
-df_combined = pd.concat([df_text, df_title], ignore_index=True)
-
-# Define the pattern to match
-pattern = '[.,()]}{'
-
-# Filter out rows where 'key' contains the pattern
-df_combined = df_combined[~df_combined['key'].str.contains(pattern)]
 
 # Initialize and fit the tokenizer
 tokenizer = tf.keras.preprocessing.text.Tokenizer()
-tokenizer.fit_on_texts(df_combined)
+tokenizer.fit_on_texts(df_combined[['key','type']])
 total_words = len(tokenizer.word_index) + 1
 
 # Convert texts to sequences of integers
