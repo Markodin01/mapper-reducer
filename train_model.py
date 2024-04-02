@@ -1,7 +1,3 @@
-import pandas as pd
-import json
-
-
 data = json.load(open('LM/article_data.json'))
 
 import json
@@ -97,9 +93,6 @@ all_percentage_reductions = [item for sublist in all_percentage_reductions for i
 import tensorflow as tf
 import numpy as np
 
-# Combine title and text for each record
-# combined_texts = data['title'] + ' ' + data['text']
-
 # REDUCED TEXTS
 combined_texts = all_final_outputs
 mode = 'REDUCER'
@@ -131,8 +124,10 @@ y = tf.keras.utils.to_categorical(labels, num_classes=total_words)
 # Define the model
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.Embedding(total_words, 100, input_length=max_sequence_len-1))
-model.add(tf.keras.layers.LSTM(150, return_sequences=True))
-model.add(tf.keras.layers.LSTM(100))
+model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(150, return_sequences=True)))
+model.add(tf.keras.layers.Dropout(0.2))
+model.add(tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(100)))
+model.add(tf.keras.layers.Dropout(0.2))
 model.add(tf.keras.layers.Dense(total_words, activation='softmax'))
 
 
@@ -190,14 +185,3 @@ plt.title('Time per epoch')
 plt.ylabel('Time (seconds)')
 plt.xlabel('Epoch')
 plt.savefig(f'time_per_epoch{mode}.png')
-
-
-
-
-
-
-
-
-
-
-
