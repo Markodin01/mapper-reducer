@@ -1,5 +1,3 @@
-data = json.load(open('LM/article_data.json'))
-
 import json
 import re
 from collections import defaultdict
@@ -89,6 +87,10 @@ for i in range(0, len(data), batch_size):
 # flatten the reuslts
 all_final_outputs = [item for sublist in all_final_outputs for item in sublist]
 all_percentage_reductions = [item for sublist in all_percentage_reductions for item in sublist]
+
+# Writing the list of strings to a JSON file
+with open('all_final_outputs.json', 'w') as file:
+    json.dump(all_final_outputs, file)
 
 import tensorflow as tf
 import numpy as np
